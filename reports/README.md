@@ -13,6 +13,7 @@ Lokala firmwarebinärer, APK:er, kernelmoduler, images, extraktionskataloger och
 - [CVE-2023-4211 Mali-fixjämförelse](sony-5433-cve-2023-4211-google-fix-comparison.md)
 - [Praktisk Sony runtime-validering](sony-tv-practical-security-validation.md)
 - [Fas 3C – statisk firmwareanalys](Fas-3C-Static-Firmware-Analysis.md)
+- [Fas 3D – deep interface security analysis](Fas-3D-Deep-Interface-Security-Analysis.md)
 
 ## VM-TV (generisk x86-emulator)
 

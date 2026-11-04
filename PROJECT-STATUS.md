@@ -24,33 +24,38 @@ Defensiv säkerhetsanalys av Sony KD-55XD9305, plattform SVP-DTV15, utan exploat
 | Praktisk Sony-validering | Klar | Läsande runtime-identitet/property-/filjämförelse; inga Mali-enhetsöppningar eller ioctl-anrop. [Valideringsrapport](reports/sony-tv-practical-security-validation.md) |
 | VM-TV Fas 2–3B | Klar | Generisk Android 7 x86-emulator analyserad. Resultat gäller inte Sony/MT5890/Mali. [VM-rapporter](reports/vm-tv-lab/) |
 | Fas 3C: statisk firmwareanalys | Klar | Kärna, Mali, policy, node-konfiguration och Sony-komponenter sammanställda. [Fas 3C](reports/Fas-3C-Static-Firmware-Analysis.md) |
+| Fas 3D: deep interface security analysis | Klar | Explicit ueventd-inventering, SELinux-regler per kandidattyp, Mali-dispatch, ION/WebAPI-begränsningar och riktad APK/Binder-granskning. [Fas 3D](reports/Fas-3D-Deep-Interface-Security-Analysis.md) |
 
 Historiska rapporter före extraktionen av rätt 5.433-policy ligger kvar i `reports/` med en tydlig notering om att senare evidens har ersatt vissa preliminära slutsatser.
 
 ## Aktuell fas
 
-Fas 3C är senast färdigställd. Fas 3D – fördjupad statisk analys av device nodes, ION, Mali-dispatch och Sony WebAPI/APK/Binder – är nästa begärda analysarbete men är inte färdigställt. Ingen analys startas automatiskt av denna Git-konfiguration.
+Fas 3D är senast färdigställd. Fas 3E är nästa planerade steg: granskning av provideråtkomst och Binder-transaktioner, fullständig context-mappning och matchande kernel/ION-underlag. Fas 3D var helt statisk; ingen anrops- eller fysisk TV-testning genomfördes.
 
 ## Aktuella huvudfynd
 
 - **F-001/F-003 Mali:** vanlig `untrusted_app` har i den extraherade SELinux-policyn `open/read/write/ioctl` mot `gpu_device:chr_file`; ueventd anger `/dev/mali0 0666`. Den hashade r14p0-modulen har relevant gammal tracking-VMA-väg och saknar den jämförda Google-fixen för CVE-2023-4211. Stark statisk CVE-matchning, inte verifierad exploitbarhet.
 - **F-002 ION:** `untrusted_app` tillåts ioctl/read/write mot `ion_device:chr_file`; `/dev/ion` är konfigurerad DAC 0666. Ingen separat ION-sårbarhet/CVE fastställd.
-- **F-005:** `/dev/sw_sync` och `/dev/block/mmcblk0p18` konfigureras DAC 0666; SELinux-/appåtkomst och nodernas praktiska innebörd är inte fastställda.
+- **F-005:** `/dev/sw_sync` och `/dev/block/mmcblk0p18` konfigureras DAC 0666; SELinux-/appåtkomst och nodernas praktiska innebörd är inte fastställda. `dtv_svc.sh` avser att ändra `/dev/video*` till 0660 root:1006; separat RFS-skript skapar `/dev/ptmx` 0666, utan verifierad Android-appåtkomst.
 - **F-004:** Sony `WebApi.xml` deklarerar `/sony/broadcastLink`; autentisering, implementation och nätverksreachability är inte verifierade.
 - **F-006:** Linux 3.10.79 är identifierad, men kernelconfig, källkod och fullständig vendorpatchserie saknas; ingen ytterligare CVE tillskrivs på versionsnummer ensamt.
+- **F-007:** exporterad `TnfContentProvider` saknar read/write-permissions och exponerar SQLite CRUD mot TNF/Samba-tabeller. Bekräftat statiskt; ej anropad.
+- **F-008:** exporterad DLNA `DlnaUriProvider` har read-permission men saknar write-permission; DEX utför SQLite insert/delete/update mot `datasource`. Bekräftat statiskt; effekt ej testad.
+- **F-009:** flera Sony Binder-tjänster är exporterade utan manifestpermission och returnerar Binder-stubbar. IPC-yta bekräftad; sårbarhet/caller-checks i hela transaktionskedjan ej fastställda.
 
 Se [FINDINGS.md](FINDINGS.md) för klassificering, status och evidenshistorik.
 
 ## Öppna frågor
 
 1. Kan lokalkopian knytas kryptografiskt till exakt installerad subversion `.0183EUB`?
-2. Vilka SELinux labels och appdomänregler gäller för samtliga device nodes, särskilt ION, sw_sync och blocknoder?
-3. Vilken ION-implementation och ioctl-dispatch ingår i MT5890-kärnan, och vilka relevanta patchar kan beläggas?
-4. Kan fullständig Mali ioctl-dispatch och övriga relevanta funktioner jämföras statiskt med publicerade fixar?
-5. Finns broadcastLink-servleten i publicerbar firmwaredel, och vilka auth/caller/input checks kan beläggas statiskt?
-6. Vilka Sony APK/Binder-komponenter är exporterade eller privileged och hur skyddas deras metoder?
-7. Vilken kernelconfig, DTB och Sony/MediaTek patchserie gäller för denna board/release?
+2. Kan exakt sökväg→SELinux-context avkodas ur Android 7:s `file_contexts.bin`, särskilt för ION, sw_sync, video, input och blocknoder?
+3. Vilken ION-implementation/ioctl-dispatch ingår i MT5890-kärnan och vilka relevanta patchar kan beläggas?
+4. Kan Mali UAPI headers matchas så dispatch-index och handlers kan analyseras per operation?
+5. Finns broadcastLink-servleten utanför extraherad systemkomponent, och vilka auth/caller/input checks gäller?
+6. Vilka konsekvenser har F-007/F-008-provideråtkomsten, och vilka permissions avsågs för dessa API:er?
+7. Vilka kontroller finns i F-009 Binder transaction stubs/delegerade metoder?
+8. Vilken kernelconfig, DTB och Sony/MediaTek patchserie gäller för denna board/release?
 
 ## Nästa steg
 
-Efter separat fasstart: genomför Fas 3D som lokal statisk granskning. Spara full rapport under `reports/`, uppdatera fynd/status/överlämning, kontrollera diff och innehåll, och pusha endast textbaserade, rensade rapporter/metadata till `origin/main`. Ingen firmware, APK, kernelmodul, image, dump med personuppgifter eller hemlighet får publiceras.
+Fas 3E bör prioritera full statisk granskning av F-007–F-009:s provider-/Binder-anropskedjor, exakt SELinux file-context mapping och anskaffning av matchande MTK/Sony kernel/ION source/config. Ingen riskfylld fysisk TV-testning. Publicera endast granskade textbaserade rapporter/metadata till `origin/main`; inga firmwarefiler, APK:er, moduler eller images.

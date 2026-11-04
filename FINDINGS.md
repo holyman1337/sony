@@ -21,6 +21,10 @@ Detta register behåller de ursprungliga fynd-ID:na F-001–F-004 från reposito
 - **Historik:** Ursprunglig repo-post F-001 var *Obekräftat* eftersom kod-/policykällan då saknades. Fas 3C uppdaterade den till bekräftad statisk allow-regel. Tidiga rapporter om okänd policy är arkiverade med historisk/superseded-notering.
 - **Senast uppdaterad:** 2026-11-04.
 
+### Fas 3D-tillägg
+
+SETools-fråga bekräftar samma allow-regel i kompilerad normal boot-policy. Full device-node-inventering återfinns i `reports/Fas-3D-Deep-Interface-Security-Analysis.md`. Den binära `file_contexts.bin` kunde inte path-dekodas av tillgänglig host-libselinux; `/dev/mali0` behåller exakt labelbevis från den tidigare runtime-observationen. Ingen Mali-operation testades.
+
 ## F-002 — ION-enheter och minnesgränssnitt
 
 - **Komponent:** `/dev/ion`, `ion_device:chr_file`.
@@ -31,6 +35,10 @@ Detta register behåller de ursprungliga fynd-ID:na F-001–F-004 från reposito
 - **Evidens:** `reports/Fas-3C-Static-Firmware-Analysis.md`; lokalt `work/sony-5433-extracted/analysis/mali-policy-analysis.txt`, `analysis/boot_ramdisk/ueventd.mt5890.rc` och kompilerad `analysis/boot_ramdisk/sepolicy`.
 - **Historik:** Ursprunglig repo-post F-002 var preliminär och obekräftad. Fas 3C gav konfigurations- och policybevis men ingen sårbarhets/CVE-träff.
 - **Senast uppdaterad:** 2026-11-04.
+
+### Fas 3D-tillägg
+
+ION-rättighetsregeln verifierades om med SETools. Implementationens ioctl-dispatch kunde inte analyseras: ingen `ion.ko`, kernelkälla eller symboliserad kernel hittades; `sysm/lib/libion.so` är 0 byte. Detta förändrar inte den bekräftade konfigurations-/policyexponeringen och ger ingen separat CVE-träff.
 
 ## F-003 — Mali-koppling till CVE-2023-4211
 
@@ -44,6 +52,10 @@ Detta register behåller de ursprungliga fynd-ID:na F-001–F-004 från reposito
 - **Historik:** Ursprunglig repo-post F-003 kallade kopplingen obekräftad och krävde kod/patchbevis. Fas 3C-binärjämförelsen uppfyller statiskt krav; exploitbarhet förblev otestad.
 - **Senast uppdaterad:** 2026-11-04.
 
+### Fas 3D-tillägg
+
+`kbase_ioctl` vid `0x177b8` (storlek `0xbb8`) disassemblerades. Den har dispatch till bland annat `kbase_mem_alloc/import/alias/commit/query/flags_change/free`, `kbase_jd_submit`, sync-, fence-, JIT- och profiling-funktioner. UAPI-header saknas, så numeriska ioctl-index kunde inte säkert namnges. Befintlig CVE-2023-4211-status ändras inte; ingen ny Mali-CVE fastställdes.
+
 ## F-004 — Sony WebAPI / broadcastLink
 
 - **Komponent:** `sysm/etc/webapi/WebApi.xml`, WebApiCore och broadcastLink servlet.
@@ -54,6 +66,10 @@ Detta register behåller de ursprungliga fynd-ID:na F-001–F-004 från reposito
 - **Evidens:** `reports/Fas-3C-Static-Firmware-Analysis.md`; lokalt `work/sony-5433-extracted/sysm/etc/webapi/WebApi.xml`.
 - **Historik:** Ursprunglig repo-post F-004 var obekräftad. Fas 3C bekräftade endast deklarationen, inte dess körning eller exponering.
 - **Senast uppdaterad:** 2026-11-04.
+
+### Fas 3D-tillägg
+
+`sysm/etc/webapi/WebApi.xml:8-10` deklarerar broadcastLink/JAR/servlet, men deklarerad JAR saknas i den extraherade kopian. Implementations-, autentiserings- och nätverksreachability-status förblir okänd.
 
 ## F-005 — Bred DAC-konfiguration för ytterligare device nodes
 
@@ -66,6 +82,12 @@ Detta register behåller de ursprungliga fynd-ID:na F-001–F-004 från reposito
 - **Historik:** Tillkom Fas 3C.
 - **Senast uppdaterad:** 2026-11-04.
 
+### Fas 3D-tillägg
+
+Explicit ueventd-inventering finns i Fas 3D-rapportens tabell. `/dev/sw_sync` och `/dev/block/mmcblk0p18` är fortsatt `0666`; exakta labels för dessa och flera andra noder kunde inte verifieras eftersom den gamla kompilerade `file_contexts.bin` inte kunde path-avkodas. SELinux-regler per kandidattyp redovisas separat från DAC.
+
+Kompletterande skriptgranskning fann `sysm/bin/dtv_svc.sh:27-28`, som efter ueventd avser att ändra `/dev/video*` till `0660 root:1006` (kommenterad som `root.camera`). Körordning och faktiskt runtime-ägarskap har inte verifierats. `rfsA/etc/scripts/mkpts.sh:77-79` skapar separat RFS `/dev/ptmx` med mode 0666 och monterar `devpts`; detta är inte bevis för att Android-appar når noden. Kontextfilens råa strängar innehåller `ptmx_device` och `/dev/ptmx`, men varken Android-domäners åtkomst till typen eller nodens relation till Android-processer har fastställts.
+
 ## F-006 — Kärnans patch- och konfigurationsstatus
 
 - **Komponent:** Linux 3.10.79 ARM/MT5890 kernel image.
@@ -77,8 +99,46 @@ Detta register behåller de ursprungliga fynd-ID:na F-001–F-004 från reposito
 - **Historik:** Tillkom Fas 3C.
 - **Senast uppdaterad:** 2026-11-04.
 
+### Fas 3D-tillägg
+
+Ingen ny kernelkälla, config, `vmlinux`, `System.map` eller patchserie tillkom i inventerat underlag. Ingen ytterligare CVE matchas enbart utifrån kernelversion.
+
+## F-007 — Oskyddad exporterad TNF/Samba content provider
+
+- **Komponent:** `InteractiveTvPlatform.apk`, `TnfContentProvider` (`content://com.sony.dtv.interactivetvplatform.discovery.provider`).
+- **Beskrivning:** providern är `exported=true` och saknar `android:permission`, `readPermission` och `writePermission`. DEX-metoderna `query`, `insert`, `update`, `delete` utför SQLite CRUD mot `TNF_DATABASE.db`; URI-mappningen omfattar bl.a. `samba_enabled`, `samba_port_number`, `samba_keys`, `samba_notify`, länder och CDN-version.
+- **CVE:** Ingen matchad.
+- **Klassificering:** Bekräftad statisk access-control-brist / cross-app read-write-yta.
+- **Bevisstatus:** Manifest- och DEX-evidens bekräftar export, avsaknad av providerpermission och CRUD-implementation. Android 7 AOSP `ContentProvider` släpper igenom standard read/write för exporterad provider utan permission/path permission. Ingen app anropade komponenten; faktisk data och följdeffekt är inte testade.
+- **Evidens:** `reports/Fas-3D-Deep-Interface-Security-Analysis.md`; `work/sony-5433-extracted/sysm/app/InteractiveTvPlatform/InteractiveTvPlatform.apk`, DEX code offsets `<clinit> 0x9eec0`, `getEntry 0x9efa8`, `onCreate 0x9f270`, `query 0x9f2b4`, `insert 0x9f1cc`, `update 0x9f370`, `delete 0x9f090`. AOSP-källa: `ContentProvider.java` tag `android-7.0.0_r33`, read gate rader 553–591 och write gate 630–668.
+- **Historik:** Tillkom Fas 3D från riktad manifest-/DEX-granskning. Ingen CVE eller runtime exploatering påstås.
+- **Senast uppdaterad:** 2026-11-04.
+
+## F-008 — DLNA provider med oreglerad skrivpermission
+
+- **Komponent:** `SemcDlna.apk`, `com.sonyericsson.dlna.datasource.provider.DlnaUriProvider`.
+- **Beskrivning:** providern är exporterad och har `readPermission=com.sonymobile.dlna.permission.READ_DATA`, men saknar `writePermission`, generell `permission` och path-permission. DEX `insert`, `delete` och `update` öppnar `DlnaUriDatabaseHelper.getWritableDatabase()` och utför SQLite-operationer på `datasource`.
+- **CVE:** Ingen matchad.
+- **Klassificering:** Bekräftad statisk oreglerad cross-app write-yta; efterföljande påverkan okänd.
+- **Bevisstatus:** Manifestfält, Android 7 write-permission-beteende samt CRUD-call sites är verifierade statiskt. Ingen provideranvändning eller effekt testades.
+- **Evidens:** `reports/Fas-3D-Deep-Interface-Security-Analysis.md`; `work/sony-5433-extracted/sysm/app/SemcDlna/SemcDlna.apk`, DEX `delete 0x8c7fc`, `insert 0x8c9a0`, `update 0x8cca8`, `query 0x8cacc`.
+- **Historik:** Tillkom Fas 3D genom statisk manifest-/DEX-granskning.
+- **Senast uppdaterad:** 2026-11-04.
+
+## F-009 — Sony exporterade Binder-gränssnitt utan manifestpermission
+
+- **Komponent:** `InteractiveTvPlatform.apk` och `InteractiveTvUtil.apk`; bl.a. VideoShmServ, AudioShmServ, NativeSystemsManager, log-/privacy-/action-log-services.
+- **Beskrivning:** flera services är uttryckligen exporterade utan manifestpermission och returnerar Binder-stubbar från `onBind`. Riktad DEX-sökning fann inga direkta caller-permission/UID-check-anrop i granskade service-entrypoints. Fullständig transaktions- och delegeringskedja är inte analyserad.
+- **CVE:** Ingen matchad.
+- **Klassificering:** Indikerad IPC-attackyta; sårbarhet eller otillbörlig åtkomst ej fastställd.
+- **Bevisstatus:** Export/permission och Binder-retur bekräftade statiskt. Transaktionsnivåns kontroller och faktisk påverkan är okända.
+- **Evidens:** `reports/Fas-3D-Deep-Interface-Security-Analysis.md`; `InteractiveTvPlatform.apk` DEX `AudioShmServ.onBind 0x9b554`, `NativeSystemsManager.onBind 0x9dc08`, `VideoShmServ.onBind 0x9e738`; `InteractiveTvUtil.apk` `ActionLogCollectorService.onBind 0x1dbe0c`, `ApplicationLogCollectorService.onBind 0x1dc288`, `PrivacyPolicyService.onBind 0x15ae80`.
+- **Historik:** Tillkom Fas 3D. Föreslagen fortsättning är full statisk granskning av Binder Stub-transaktioner och caller-checks.
+- **Senast uppdaterad:** 2026-11-04.
+
 ## Registerhistorik
 
 - Ursprungsversionen av F-001–F-004 var preliminära; de första obekräftade statusarna finns kvar i repositoryts tidigare Git-commit.
 - 2026-11-04: Fas 3C-evidens lades till utan att firmwarebinärer eller andra proprietära filer publicerades. Gamla rapporter omöjliga att förena med senare evidens har arkiverats med tydlig historiknotering.
+- 2026-11-04: Fas 3D lade till ioctl-dispatchöversikt, full ueventd-inventering med path-context-begränsning och tre nya fynd (F-007–F-009). Endast textdokumentation uppdaterades; ingen runtime-testning genomfördes.
 - Nästa fasuppdatering ska läggas till som status-/evidenshistorik; ID:n återanvänds inte för nya fynd.
